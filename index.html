@@ -15,8 +15,9 @@
 <script src="https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.1.4/dist/mindar-image-aframe.prod.js"></script>
 
 <style>
-  html, body { margin:0; padding:0; height:100%; background:#111; font-family:-apple-system, system-ui, sans-serif; }
-  a-scene { position:fixed; inset:0; z-index:5; }
+  /* IMPORTANTE: html/body SIN color de fondo; si no, tapan el vídeo de la cámara (MindAR lo coloca con z-index negativo) */
+  html, body { margin:0; padding:0; height:100%; overflow:hidden; font-family:-apple-system, system-ui, sans-serif; }
+  a-scene { background:transparent; }
 
   #home {
     position:fixed; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;
