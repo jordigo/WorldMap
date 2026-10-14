@@ -85,6 +85,11 @@ const DOT_PX_FAR = 9, DOT_PX_NEAR = 22, DIST_FAR_M = 2.0, DIST_NEAR_M = 0.5;
 // Un punto nunca es más grande que esta fracción de la distancia (en pantalla) a su vecino
 // más cercano, ni más pequeño que DOT_PX_MIN. Así los puntos muy juntos se encogen solos.
 const NEIGHBOR_FACTOR = 0.7, DOT_PX_MIN = 5;
+// Suavizado propio de la posición del mapa (contra la vibración). ALPHA_MIN más bajo = más
+// estable pero con más retardo al mover. Si el error entre la posición medida y la suavizada
+// es menor que DEAD_PX se suaviza al máximo; a partir de FULL_PX se sigue el movimiento sin retardo.
+const SMOOTH_ALPHA_MIN = 0.12, SMOOTH_DEAD_PX = 2, SMOOTH_FULL_PX = 22;
+const DEBUG = location.search.includes("debug");
 // Al tocar se consideran los puntos a menos de TAP_RADIUS_PX del dedo. Si el más cercano
 // no gana por al menos AMBIG_PX al segundo, se muestra un selector con las opciones.
 const TAP_RADIUS_PX = 38, AMBIG_PX = 12;
@@ -189,6 +194,15 @@ function whenText(t) {
 AFRAME.registerComponent("travel-dots", {
   init() {
     this.v = new THREE.Vector3();
+    this.anchor = new THREE.Group();                 // ancla suavizada (no depende directamente de MindAR)
+    this.anchor.visible = false;
+    this.el.sceneEl.object3D.add(this.anchor);
+    this.rp = new THREE.Vector3(); this.rq = new THREE.Quaternion(); this.rs = new THREE.Vector3(1, 1, 1);
+    this.sp = new THREE.Vector3(); this.sq = new THREE.Quaternion(); this.ss = new THREE.Vector3(1, 1, 1);
+    this.rawM = new THREE.Matrix4(); this.smM = new THREE.Matrix4();
+    this.ref = [new THREE.Vector3(0, 0, 0), new THREE.Vector3(-0.4, 0.25, 0), new THREE.Vector3(0.4, -0.25, 0)];
+    this.q1 = new THREE.Vector3(); this.q2 = new THREE.Vector3();
+    this.has = false; this.frames = 0; this.t0 = performance.now(); this.err = 0;
     this.dots = TRIPS.map(t => {
       const g = new THREE.Group();
       const mk = (r, color, order) => {
@@ -198,20 +212,45 @@ AFRAME.registerComponent("travel-dots", {
       };
       g.add(mk(1.35, 0xffffff, 10));
       g.add(mk(1, new THREE.Color(t.color), 11));
-      this.el.object3D.add(g);
+      this.anchor.add(g);
       return { t, g, dw: 1, sx: 0, sy: 0 };
     });
   },
   tick() {
     const o = this.el.object3D, sc = this.el.sceneEl, cam = sc.camera;
-    if (!o.visible || !cam || !sc.canvas) return;
+    if (!cam || !sc.canvas) return;
+    if (!o.visible) { this.anchor.visible = false; this.has = false; return; }
     const W = sc.canvas.clientWidth, H = sc.canvas.clientHeight;
+    /* Suavizado de la pose del mapa */
+    o.matrix.decompose(this.rp, this.rq, this.rs);                     // pose medida por MindAR
+    if (!this.has) { this.sp.copy(this.rp); this.sq.copy(this.rq); this.ss.copy(this.rs); this.has = true; }
+    else {
+      this.rawM.compose(this.rp, this.rq, this.rs); this.smM.compose(this.sp, this.sq, this.ss);
+      let err = 0;
+      for (const r of this.ref) {
+        this.q1.copy(r).applyMatrix4(this.rawM).project(cam);
+        this.q2.copy(r).applyMatrix4(this.smM).project(cam);
+        err = Math.max(err, Math.hypot((this.q1.x - this.q2.x) * W / 2, (this.q1.y - this.q2.y) * H / 2));
+      }
+      this.err = err;
+      const u = Math.min(1, Math.max(0, (err - SMOOTH_DEAD_PX) / (SMOOTH_FULL_PX - SMOOTH_DEAD_PX)));
+      const al = SMOOTH_ALPHA_MIN + (1 - SMOOTH_ALPHA_MIN) * u * u;
+      this.sp.lerp(this.rp, al); this.sq.slerp(this.rq, al); this.ss.lerp(this.rs, al);
+    }
+    this.anchor.position.copy(this.sp); this.anchor.quaternion.copy(this.sq); this.anchor.scale.copy(this.ss);
+    this.anchor.visible = true; this.anchor.updateMatrixWorld(true);
+    if (DEBUG && ++this.frames >= 30) {                                // fps y error en pantalla
+      const now = performance.now();
+      const el = document.getElementById("dbg");
+      if (el) el.textContent = Math.round(this.frames * 1000 / (now - this.t0)) + " fps · err " + this.err.toFixed(1) + " px";
+      this.frames = 0; this.t0 = now;
+    }
     const f = cam.projectionMatrix.elements[5] * H / 2;                // focal en px
-    const k = o.matrixWorld.getMaxScaleOnAxis() || 1;
+    const k = this.anchor.matrixWorld.getMaxScaleOnAxis() || 1;
     const lf = Math.log(DIST_FAR_M), ln = Math.log(DIST_NEAR_M);
     const D = this.dots, p = this.p || (this.p = new THREE.Vector3());
     for (const d of D) {                                               // 1) distancia y posición en pantalla
-      this.v.set(d.t.x, d.t.y, 0).applyMatrix4(o.matrixWorld);
+      this.v.set(d.t.x, d.t.y, 0).applyMatrix4(this.anchor.matrixWorld);
       d.dw = this.v.length();
       p.copy(this.v).project(cam);
       d.sx = (p.x * 0.5 + 0.5) * W; d.sy = (-p.y * 0.5 + 0.5) * H;
@@ -234,7 +273,7 @@ AFRAME.registerComponent("travel-dots", {
   },
   pick(cx, cy) {                                                       // puntos cerca del dedo, ordenados
     const sc = this.el.sceneEl, cam = sc.camera, out = [];
-    if (!this.el.object3D.visible || !cam) return out;
+    if (!this.anchor.visible || !cam) return out;
     const rect = sc.canvas.getBoundingClientRect();
     for (const { t, g } of this.dots) {
       this.v.setFromMatrixPosition(g.matrixWorld).project(cam);
@@ -248,7 +287,8 @@ AFRAME.registerComponent("travel-dots", {
   }
 });
 
-if (location.search.includes("debug")) {   // abre la web con ?debug para ver la consola en el móvil
+if (DEBUG) {
+  window.addEventListener("DOMContentLoaded", () => { document.getElementById("dbg").style.display = "block"; });   // abre la web con ?debug para ver la consola en el móvil
   const s = document.createElement("script");
   s.src = "https://cdn.jsdelivr.net/npm/eruda";
   s.onload = () => eruda.init();
@@ -258,10 +298,7 @@ if (location.search.includes("debug")) {   // abre la web con ?debug para ver la
 </head>
 <body>
 
-<!-- Suavizado/estabilidad del seguimiento (ajustable):
-     filterMinCF: más bajo = menos vibración · filterBeta: más bajo = más suavizado al mover (y más retardo)
-     missTolerance: fotogramas sin ver el mapa antes de ocultar los puntos -->
-<a-scene mindar-image="imageTargetSrc: ./targets.mind; autoStart: false; uiScanning: yes; uiLoading: yes; filterMinCF: 0.0005; filterBeta: 40; missTolerance: 20;"
+<a-scene mindar-image="imageTargetSrc: ./targets.mind; autoStart: false; uiScanning: yes; uiLoading: yes;"
          color-space="sRGB" renderer="colorManagement: true, physicallyCorrectLights"
          vr-mode-ui="enabled: false" device-orientation-permission-ui="enabled: false">
   <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
@@ -305,6 +342,7 @@ if (location.search.includes("debug")) {   // abre la web con ?debug para ver la
 </div>
 <div id="viewer"><img id="viewer-img" alt=""></div>
 
+<div id="dbg" style="position:fixed;left:8px;bottom:8px;z-index:26;color:#0f0;font:12px monospace;background:rgba(0,0,0,.6);padding:2px 6px;border-radius:6px;display:none"></div>
 <div id="rotate">📱 Gira el móvil a vertical para usar la cámara</div>
 
 <script>
