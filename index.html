@@ -74,12 +74,12 @@
 /* ===========================================================================
    CONFIGURACIÓN
    =========================================================================== */
-// Tamaño (en píxeles) de la foto con la que generaste targets.mind
-const IMG_W = 2400, IMG_H = 1350;
-// Ancho REAL (en metros) de lo que abarca esa foto en la pared. El mapa mide 1,5 m y en la
-// foto ocupa el 88 % del ancho (de ahí 1,5 / 0,88 = 1,7 m). De él depende el cálculo de
-// "a cuántos metros estoy" para el tamaño de los puntos.
-const TARGET_WIDTH_M = 1.7;
+// Tamaño (en píxeles) de la foto con la que generaste targets.mind (solo importan sus proporciones: 4:3)
+const IMG_W = 2576, IMG_H = 1932;
+// Ancho REAL (en metros) de lo que abarca esa foto en la pared. El mapa mide 1,5 x 1 m y en la
+// foto nueva ocupa casi todo el ancho (unos 1,53-1,59 m según se mida por ancho o por alto).
+// De él depende el cálculo de "a cuántos metros estoy" para el tamaño de los puntos.
+const TARGET_WIDTH_M = 1.55;
 // Tamaño de los puntos en pantalla (píxeles CSS): lejos (>= 2 m) y cerca (<= 0.5 m)
 const DOT_PX_FAR = 9, DOT_PX_NEAR = 22, DIST_FAR_M = 2.0, DIST_NEAR_M = 0.5;
 // Un punto nunca es más grande que esta fracción de la distancia (en pantalla) a su vecino
@@ -103,7 +103,7 @@ const WHO = {
    TUS VIAJES
    who: "J" Jordi (azul) · "M" Mireia (rosa) · "A" ambos (naranja)
    lugar: ciudad/sitio (null si solo se conoce el país -> el punto va en la capital)
-   px: posición [x, y] sobre la foto del mapa (2400x1350)
+   px: posición [x, y] sobre la foto del mapa (2576x1932)
    year: lo que se muestra · date: "AAAA-MM[-DD]" opcional · notes: texto libre
    photos: lista de rutas/URLs, p. ej. ["fotos/sydney1.jpg", "fotos/sydney2.jpg"]
    Si un mismo sitio lo visitasteis por separado (J y M), salen dos puntos juntos y
@@ -114,50 +114,50 @@ const fotos = (carpeta, n) => Array.from({ length: n }, (_, i) => "fotos/" + car
 const E = (who, lugar, pais, px, o = {}) => Object.assign({ who, lugar, pais, px, photos: [], notes: "" }, o);
 const TRIPS = [
   // ---- Jordi (azul) ----
-  E("J", "San Francisco", "Estados Unidos", [361, 531], { year: 2008, date: "2008-07" }),
-  E("J", "Las Vegas",     "Estados Unidos", [399, 541], { year: 2008, date: "2008-07" }),
-  E("J", "Yosemite",      "Estados Unidos", [382, 531], { year: 2008, date: "2008-07" }),
-  E("J", "Nueva York",    "Estados Unidos", [647, 520], { year: 2008, date: "2008-07" }),
-  E("J", "Roma",          "Italia", [1145, 527]),
-  E("J", "Venecia",       "Italia", [1143, 503]),
-  E("J", "Florencia",     "Italia", [1135, 512]),
-  E("J", "Copenhague",    "Dinamarca", [1122, 424]),
-  E("J", "Ámsterdam",     "Países Bajos", [1101, 449]),
-  E("J", "Londres",       "Reino Unido", [1046, 460], { year: 2012, date: "2012-09" }),
-  E("J", "Glasgow",       "Reino Unido", [1033, 430], { year: 2012, date: "2012-09" }),
-  E("J", "Edimburgo",     "Reino Unido", [1042, 428], { year: 2012, date: "2012-09" }),
-  E("J", "Inverness",     "Reino Unido", [1036, 418], { year: 2012, date: "2012-09" }),
+  E("J", "San Francisco", "Estados Unidos", [256, 795], { year: 2008, date: "2008-07" }),
+  E("J", "Las Vegas",     "Estados Unidos", [304, 807], { year: 2008, date: "2008-07" }),
+  E("J", "Yosemite",      "Estados Unidos", [283, 795], { year: 2008, date: "2008-07" }),
+  E("J", "Nueva York",    "Estados Unidos", [622, 776], { year: 2008, date: "2008-07" }),
+  E("J", "Roma",          "Italia", [1264, 778]),
+  E("J", "Venecia",       "Italia", [1261, 747]),
+  E("J", "Florencia",     "Italia", [1251, 758]),
+  E("J", "Copenhague",    "Dinamarca", [1233, 645]),
+  E("J", "Ámsterdam",     "Países Bajos", [1206, 678]),
+  E("J", "Londres",       "Reino Unido", [1135, 693], { year: 2012, date: "2012-09" }),
+  E("J", "Glasgow",       "Reino Unido", [1118, 654], { year: 2012, date: "2012-09" }),
+  E("J", "Edimburgo",     "Reino Unido", [1130, 651], { year: 2012, date: "2012-09" }),
+  E("J", "Inverness",     "Reino Unido", [1122, 639], { year: 2012, date: "2012-09" }),
 
   // ---- Mireia (rosa) ----
-  E("M", "Santiago",         "Chile", [645, 1012], { year: "1999–2004" }),
-  E("M", "Atacama",          "Chile", [645, 945],  { year: "1999–2004" }),
-  E("M", "Torres del Paine", "Chile", [648, 1128], { year: "1999–2004" }),
-  E("M", "Isla de Pascua",   "Chile", [557, 986],  { year: "1999–2004" }),
-  E("M", null, "Argentina",           [718, 1010]), // Buenos Aires
-  E("M", null, "Perú",                [605, 870]),  // Lima
-  E("M", null, "Uruguay",             [737, 1014]), // Montevideo
-  E("M", null, "Brasil",              [772, 893]),  // Brasilia
-  E("M", null, "Paraguay",            [707, 950]),  // Asunción
-  E("M", null, "México",              [476, 682]),  // Ciudad de México
-  E("M", null, "República Dominicana",[696, 683]),  // Santo Domingo
-  E("M", "Toronto",  "Canadá", [609, 495]),
-  E("M", "Ottawa",   "Canadá", [631, 483]),
-  E("M", "Montreal", "Canadá", [643, 482]),
-  E("M", "Quebec",   "Canadá", [658, 472]),
-  E("M", "Banff",    "Canadá", [418, 430]),
-  E("M", null, "Grecia",              [1201, 553]), // Atenas
+  E("M", "Santiago",         "Chile", [623, 1412], { year: "1999–2004" }),
+  E("M", "Atacama",          "Chile", [623, 1325],  { year: "1999–2004" }),
+  E("M", "Torres del Paine", "Chile", [628, 1562], { year: "1999–2004" }),
+  E("M", "Isla de Pascua",   "Chile", [510, 1379],  { year: "1999–2004" }),
+  E("M", null, "Argentina",           [717, 1408]), // Buenos Aires
+  E("M", null, "Perú",                [571, 1228]),  // Lima
+  E("M", null, "Uruguay",             [742, 1413]), // Montevideo
+  E("M", null, "Brasil",              [786, 1256]),  // Brasilia
+  E("M", null, "Paraguay",            [703, 1331]),  // Asunción
+  E("M", null, "México",              [404, 987]),  // Ciudad de México
+  E("M", null, "República Dominicana",[686, 986]),  // Santo Domingo
+  E("M", "Toronto",  "Canadá", [573, 745]),
+  E("M", "Ottawa",   "Canadá", [601, 729]),
+  E("M", "Montreal", "Canadá", [617, 728]),
+  E("M", "Quebec",   "Canadá", [636, 714]),
+  E("M", "Banff",    "Canadá", [328, 664]),
+  E("M", null, "Grecia",              [1337, 810]), // Atenas
 
   // ---- Ambos (naranja) ----
-  E("A", "Lisboa", "Portugal", [1027, 550], { year: 2015, date: "2015-08" }),
-  E("A", null, "Islandia",     [938, 349],  { year: 2015, date: "2015-09" }), // Reikiavik
-  E("A", "Cairns",       "Australia",     [1938, 948],  { year: 2019, date: "2019-08" }),
-  E("A", "Sídney",       "Australia",     [1975, 1033], { year: 2019, date: "2019-08" }),
-  E("A", "Melbourne",    "Australia",     [1925, 1095], { year: 2019, date: "2019-08" }),
-  E("A", "Perth",        "Australia",     [1754, 1040], { year: 2019, date: "2019-08" }),
-  E("A", "Auckland",     "Nueva Zelanda", [2100, 1102], { year: 2019, date: "2019-08" }),
-  E("A", "Christchurch", "Nueva Zelanda", [2056, 1146], { year: 2019, date: "2019-08" }),
-  E("A", null, "Singapur",     [1691, 789], { year: 2019, date: "2019-08" }),
-  E("A", null, "Cuba",         [591, 659],  { year: 2016, date: "2016-08" })   // La Habana
+  E("A", "Lisboa", "Portugal", [1112, 809], { year: 2015, date: "2015-08" }),
+  E("A", null, "Islandia",     [995, 552],  { year: 2015, date: "2015-09" }), // Reikiavik
+  E("A", "Cairns",       "Australia",     [2306, 1314],  { year: 2019, date: "2019-08" }),
+  E("A", "Sídney",       "Australia",     [2357, 1425], { year: 2019, date: "2019-08" }),
+  E("A", "Melbourne",    "Australia",     [2292, 1507], { year: 2019, date: "2019-08" }),
+  E("A", "Perth",        "Australia",     [2066, 1437], { year: 2019, date: "2019-08" }),
+  E("A", "Auckland",     "Nueva Zelanda", [2523, 1514], { year: 2019, date: "2019-08" }),
+  E("A", "Christchurch", "Nueva Zelanda", [2466, 1573], { year: 2019, date: "2019-08" }),
+  E("A", null, "Singapur",     [1979, 1110], { year: 2019, date: "2019-08" }),
+  E("A", null, "Cuba",         [551, 956],  { year: 2016, date: "2016-08" })   // La Habana
 ];
 
 /* ---------- Preparación de datos ---------- */
