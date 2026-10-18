@@ -116,7 +116,7 @@ const WHO = {
    el año lleva "(J)" / "(M)" automáticamente.
    =========================================================================== */
 // fotos("sydney", 12) -> ["fotos/sydney/01.jpg", ..., "fotos/sydney/12.jpg"]
-fotos("cairns", 6) -> ["fotos/cairns/01.jpg", "fotos/cairns/02.jpg", "fotos/cairns/03.jpg", "fotos/cairns/04.jpg", "fotos/cairns/05.jpg", "fotos/cairns/06.jpg"]
+
 const fotos = (carpeta, n) => Array.from({ length: n }, (_, i) => "fotos/" + carpeta + "/" + String(i + 1).padStart(2, "0") + ".jpg");
 const E = (who, lugar, pais, px, o = {}) => Object.assign({ who, lugar, pais, px, photos: [], notes: "" }, o);
 const TRIPS = [
@@ -158,6 +158,7 @@ const TRIPS = [
   E("A", "Lisboa", "Portugal", [1112, 809], { year: 2015, date: "2015-08" }),
   E("A", null, "Islandia",     [995, 552],  { year: 2015, date: "2015-09" }), // Reikiavik
   E("A", "Cairns",       "Australia",     [2306, 1314],  { year: 2019, date: "2019-08" }),
+  fotos("cairns", 6) -> ["fotos/cairns/01.jpg", "fotos/cairns/02.jpg", "fotos/cairns/03.jpg", "fotos/cairns/04.jpg", "fotos/cairns/05.jpg", "fotos/cairns/06.jpg"]
   E("A", "Sídney",       "Australia",     [2357, 1425], { year: 2019, date: "2019-08" }),
   E("A", "Melbourne",    "Australia",     [2292, 1507], { year: 2019, date: "2019-08" }),
   E("A", "Perth",        "Australia",     [2066, 1437], { year: 2019, date: "2019-08" }),
