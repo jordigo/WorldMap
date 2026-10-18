@@ -101,12 +101,13 @@ const SHOW_FULL_DATE = false;
 const WHO = {
   J: { color: "#2f80ff", label: "Jordi" },
   M: { color: "#ff3ea5", label: "Mireia" },
-  A: { color: "#ff8a00", label: "Mireia y Jordi" }
+  A: { color: "#2fc45a", label: "Mireia y Jordi" },
+  W: { color: "#ff8a00", label: "Nos gustaría ir" }
 };
 
 /* ===========================================================================
    TUS VIAJES
-   who: "J" Jordi (azul) · "M" Mireia (rosa) · "A" ambos (naranja)
+   who: "J" Jordi (azul) · "M" Mireia (rosa) · "A" ambos (verde) · "W" lista de deseos (naranja)
    lugar: ciudad/sitio (null si solo se conoce el país -> el punto va en la capital)
    px: posición [x, y] sobre la foto del mapa (2576x1932)
    year: lo que se muestra · date: "AAAA-MM[-DD]" opcional · notes: texto libre
@@ -162,7 +163,24 @@ const TRIPS = [
   E("A", "Auckland",     "Nueva Zelanda", [2523, 1514], { year: 2019, date: "2019-08" }),
   E("A", "Christchurch", "Nueva Zelanda", [2466, 1573], { year: 2019, date: "2019-08" }),
   E("A", null, "Singapur",     [1979, 1110], { year: 2019, date: "2019-08" }),
-  E("A", null, "Cuba",         [551, 956],  { year: 2016, date: "2016-08" })   // La Habana
+  E("A", null, "Cuba",         [551, 956],  { year: 2016, date: "2016-08" }),  // La Habana
+
+  // ---- Nos gustaría ir (naranja) · sacados de las chinchetas naranjas del mapa antiguo ----
+  E("W", "Hawái",           "Estados Unidos", [100, 912]),
+  E("W", "Manaos",          "Brasil",         [691, 1177]),
+  E("W", "Río de Janeiro",  "Brasil",         [848, 1280]),   // ¿o São Paulo? por confirmar
+  E("W", "Porto Alegre",    "Brasil",         [775, 1370]),
+  E("W", "Oslo",            "Noruega",        [1228, 589]),
+  E("W", "Estocolmo",       "Suecia",         [1258, 595]),
+  E("W", "Cracovia",        "Polonia",        [1313, 700]),
+  E("W", "Vilna",           "Lituania",       [1332, 642]),
+  E("W", "El Cairo",        "Egipto",         [1417, 890]),
+  E("W", "Ciudad del Cabo", "Sudáfrica",      [1306, 1388]),
+  E("W", null, "Madagascar",                  [1522, 1262]),  // Antananarivo
+  E("W", null, "Seychelles",                  [1590, 1138]),
+  E("W", null, "Maldivas",                    [1755, 1116]),  // por confirmar
+  E("W", "Bangkok",         "Tailandia",      [1950, 1012]),
+  E("W", "Yakarta",         "Indonesia",      [2037, 1204])
 ];
 
 /* ---------- Preparación de datos ---------- */
@@ -174,7 +192,7 @@ TRIPS.forEach((t, i) => {
   t.color = WHO[t.who].color;
   const g = groups[t.pais + "|" + (t.lugar || "")];
   const hasJ = g.some(x => x.who === "J"), hasM = g.some(x => x.who === "M");
-  t.showTag = hasJ && hasM && t.who !== "A";               // mostrar (J)/(M)
+  t.showTag = hasJ && hasM && (t.who === "J" || t.who === "M");   // mostrar (J)/(M)
   t.pair = t.showTag ? (t.who === "J" ? -1 : 1) : 0;       // puntos azul y rosa juntos
   t.x = ((t.px[0] / IMG_W - 0.5) * CAL.sx) + CAL.ox;
   t.y = (((IMG_H / 2 - t.px[1]) / IMG_W) * CAL.sy) + CAL.oy;
@@ -182,6 +200,7 @@ TRIPS.forEach((t, i) => {
 
 const MESES = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
 function whenText(t) {
+  if (t.who === "W") return "Pendiente de visitar";
   let s;
   if (SHOW_FULL_DATE && t.date) {
     const [y, m, d] = t.date.split("-");
@@ -316,7 +335,8 @@ if (DEBUG) {
 <div id="legend">
   <div><i style="background:#2f80ff"></i>Jordi</div>
   <div><i style="background:#ff3ea5"></i>Mireia</div>
-  <div><i style="background:#ff8a00"></i>Ambos</div>
+  <div><i style="background:#2fc45a"></i>Ambos</div>
+  <div><i style="background:#ff8a00"></i>Nos gustaría ir</div>
 </div>
 <div id="list-view"></div>
 
@@ -448,7 +468,7 @@ document.addEventListener("click", e => {
 $("start-list").addEventListener("click", () => {
   $("home").style.display = "none"; $("back-btn").style.display = "block";
   const el = $("list-view"); el.style.display = "block"; el.innerHTML = "";
-  ["J", "M", "A"].forEach(w => {
+  ["J", "M", "A", "W"].forEach(w => {
     const items = TRIPS.filter(t => t.who === w);
     el.insertAdjacentHTML("beforeend", "<h3>" + WHO[w].label + " (" + items.length + ")</h3>");
     items.forEach(t => {
