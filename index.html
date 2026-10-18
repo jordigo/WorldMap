@@ -116,6 +116,7 @@ const WHO = {
    el año lleva "(J)" / "(M)" automáticamente.
    =========================================================================== */
 // fotos("sydney", 12) -> ["fotos/sydney/01.jpg", ..., "fotos/sydney/12.jpg"]
+fotos("cairns", 6) -> ["fotos/cairns/01.jpg", "fotos/cairns/02.jpg", "fotos/cairns/03.jpg", "fotos/cairns/04.jpg", "fotos/cairns/05.jpg", "fotos/cairns/06.jpg"]
 const fotos = (carpeta, n) => Array.from({ length: n }, (_, i) => "fotos/" + carpeta + "/" + String(i + 1).padStart(2, "0") + ".jpg");
 const E = (who, lugar, pais, px, o = {}) => Object.assign({ who, lugar, pais, px, photos: [], notes: "" }, o);
 const TRIPS = [
