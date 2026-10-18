@@ -39,8 +39,18 @@
 
   /* Capas: ficha (1) -> galería (2) -> visor (3) */
   #card { display:none; position:fixed; inset:0; background:rgba(0,0,0,.7); align-items:flex-end; justify-content:center; z-index:30; }
-  #card-inner { background:#1a1a1a; color:#fff; width:100%; max-width:520px; max-height:85vh; overflow-y:auto;
-                border-radius:20px 20px 0 0; padding:20px 18px calc(20px + env(safe-area-inset-bottom,0px)); box-sizing:border-box; }
+  #card-inner { background:#1a1a1a; color:#fff; width:100%; max-width:520px; max-height:85vh; display:flex; flex-direction:column;
+                border-radius:20px 20px 0 0; box-sizing:border-box; overflow:hidden; }
+  #card-head { flex:none; padding:16px 18px 6px; touch-action:none; user-select:none; -webkit-user-select:none; }
+  #card-inner.expanded #card-head { padding-top:calc(16px + env(safe-area-inset-top,0px)); }
+  #card-inner.has-photos #card-head { cursor:pointer; }
+  #card-grab { display:none; width:42px; height:4px; border-radius:2px; background:#666; margin:0 auto 12px; }
+  #card-inner.draggable #card-grab { display:block; }
+  .head-row { display:flex; align-items:center; justify-content:space-between; }
+  #card-count { color:#bbb; font-size:0.85rem; }
+  #card-body { flex:1 1 auto; min-height:0; overflow-y:auto; padding:0 18px calc(20px + env(safe-area-inset-bottom,0px)); }
+  #card-inner:not(.expanded) #card-photos .grid .ph:nth-child(n+7) { display:none; }
+  #card-inner.expanded .more { display:none; }
   .chip { display:inline-block; font-size:0.75rem; font-weight:600; padding:3px 10px; border-radius:20px; color:#fff; margin-bottom:8px; }
   #card-inner h2 { margin:0; font-size:1.4rem; }
   #card-sub { color:#aaa; margin:2px 0 8px; }
@@ -373,13 +383,18 @@ if (DEBUG) {
 </div></div>
 
 <div id="card"><div id="card-inner">
-  <span class="chip" id="card-chip"></span>
-  <h2 id="card-title"></h2>
-  <div id="card-sub"></div>
-  <div id="card-when"></div>
-  <p id="card-notes"></p>
-  <div id="card-photos"></div>
-  <button id="card-close">Cerrar</button>
+  <div id="card-head">
+    <div id="card-grab"></div>
+    <div class="head-row"><span class="chip" id="card-chip"></span><span id="card-count"></span></div>
+    <h2 id="card-title"></h2>
+    <div id="card-sub"></div>
+    <div id="card-when"></div>
+  </div>
+  <div id="card-body">
+    <p id="card-notes"></p>
+    <div id="card-photos"></div>
+    <button id="card-close">Cerrar</button>
+  </div>
 </div></div>
 
 <div id="gallery">
@@ -430,27 +445,74 @@ function openCard(t) {
   $("card-title").textContent = t.lugar || t.pais;
   $("card-sub").textContent = t.lugar ? t.pais : "";
   $("card-when").textContent = whenText(t);
+  $("card-count").textContent = t.photos.length ? "📷 " + t.photos.length : "";
   $("card-notes").textContent = t.notes || "";
   $("card-notes").style.display = t.notes ? "block" : "none";
+  // estado inicial: ficha plegada
+  const ci = $("card-inner");
+  ci.className = (t.photos.length ? "has-photos " : "") + (t.photos.length > 6 ? "draggable" : "");
+  ci.style.transition = ""; ci.style.height = ""; ci.style.maxHeight = ""; $("card-body").scrollTop = 0;
   const box = $("card-photos"); box.innerHTML = "";
   if (!t.photos.length) {
     box.innerHTML = '<div class="nophotos">Aún no hay fotos de este viaje</div>';
   } else {
     const MAX = 6, grid = document.createElement("div"); grid.className = "grid";
-    t.photos.slice(0, MAX).forEach((src, i) => {
+    t.photos.forEach((src, i) => {
       const d = document.createElement("div"); d.className = "ph";
       d.innerHTML = '<img loading="lazy" src="' + src + '" alt="">';
-      if (i === MAX - 1 && t.photos.length > MAX) {
-        d.insertAdjacentHTML("beforeend", '<div class="more">+' + (t.photos.length - MAX + 1) + "</div>");
-      }
       const isMore = i === MAX - 1 && t.photos.length > MAX;
-      d.onclick = () => isMore ? openGallery(t) : openGallery(t, i);   // la miniatura "+N" abre la galería; el resto, la foto
+      if (isMore) d.insertAdjacentHTML("beforeend", '<div class="more">+' + (t.photos.length - MAX + 1) + "</div>");
+      // plegada: la miniatura "+N" abre la galería; ampliada (o resto): se abre la foto pulsada
+      d.onclick = () => (isMore && !ci.classList.contains("expanded")) ? openGallery(t) : openGallery(t, i);
       grid.appendChild(d);
     });
     box.appendChild(grid);
   }
   push("card");
+  requestAnimationFrame(() => { collapsedH = ci.offsetHeight; });
 }
+
+/* ---- Cabecera de la ficha: tocar = galería · arrastrar arriba/abajo = ampliar/reducir ---- */
+let collapsedH = 0, ds = null;
+const chead = $("card-head");
+function setSheet(expand) {
+  const ci = $("card-inner");
+  ci.style.transition = "height .22s ease";
+  if (expand) {
+    ci.classList.add("expanded"); ci.style.maxHeight = "none"; ci.style.height = innerHeight + "px";
+  } else {
+    ci.style.height = (collapsedH || Math.round(innerHeight * 0.5)) + "px";
+    setTimeout(() => {
+      ci.classList.remove("expanded"); ci.style.transition = ""; ci.style.height = ""; ci.style.maxHeight = "";
+      $("card-body").scrollTop = 0;
+    }, 230);
+  }
+}
+chead.addEventListener("pointerdown", e => {
+  const ci = $("card-inner");
+  ds = { y0: e.clientY, h0: ci.offsetHeight, moved: false, wasExp: ci.classList.contains("expanded") };
+  chead.setPointerCapture(e.pointerId);
+});
+chead.addEventListener("pointermove", e => {
+  if (!ds) return;
+  const dy = e.clientY - ds.y0;
+  if (Math.abs(dy) > 8) ds.moved = true;
+  if (!ds.moved || !current || current.photos.length <= 6) return;
+  const ci = $("card-inner");
+  if (dy < 0 && !ci.classList.contains("expanded")) ci.classList.add("expanded");   // al subir se muestran todas las miniaturas
+  ci.style.transition = "none"; ci.style.maxHeight = "none";
+  const lo = collapsedH || Math.round(innerHeight * 0.5);
+  ci.style.height = Math.min(innerHeight, Math.max(lo, ds.h0 - dy)) + "px";
+});
+chead.addEventListener("pointerup", e => {
+  if (!ds) return;
+  const d = ds; ds = null;
+  const dy = e.clientY - d.y0;
+  if (!d.moved) { if (current && current.photos.length) openGallery(current); return; }   // toque simple: galería
+  if (!current || current.photos.length <= 6) return;
+  if (dy < -40) setSheet(true); else if (dy > 40) setSheet(false); else setSheet(d.wasExp);
+});
+chead.addEventListener("pointercancel", () => { if (ds) { const w = ds.wasExp; ds = null; setSheet(w); } });
 function openGallery(t, idx) {
   $("gallery-title").textContent = (t.lugar ? t.lugar + ", " : "") + t.pais + " · " + whenText(t);
   const g = $("gallery-grid"); g.innerHTML = "";
