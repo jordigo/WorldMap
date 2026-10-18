@@ -17,8 +17,9 @@
 
   #home { position:fixed; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;
           gap:16px; padding:24px; text-align:center; color:#fff; background:#111; z-index:20; }
-  #home h1 { font-size:1.4rem; margin:0 0 8px; }
-  #home p { color:#aaa; font-size:0.95rem; max-width:340px; }
+  #home-bg { position:absolute; inset:0; z-index:-1; background-size:cover; background-position:center; background-repeat:no-repeat; opacity:0.5; }
+  #home h1 { font-size:1.4rem; margin:0 0 8px; text-shadow:0 1px 8px #000; }
+  #home p { color:#ddd; font-size:0.95rem; max-width:340px; text-shadow:0 1px 8px #000; }
   .btn { padding:14px 28px; border-radius:12px; border:none; font-size:1rem; font-weight:600; width:260px; }
   .btn-primary { background:#e63946; color:#fff; }
   .btn-secondary { background:#2a2a2a; color:#fff; }
@@ -64,7 +65,9 @@
   #gallery .grid { padding:6px; overflow-y:auto; flex:1; align-content:start; }
 
   #viewer { display:none; position:fixed; inset:0; background:#000; z-index:50; align-items:center; justify-content:center; }
-  #viewer img { max-width:100%; max-height:100%; object-fit:contain; }
+  #viewer img { max-width:100%; max-height:100%; object-fit:contain; will-change:transform; user-select:none; -webkit-user-drag:none; }
+  #viewer { touch-action:pan-y; }
+  #viewer-count { position:absolute; top:calc(12px + env(safe-area-inset-top,0px)); left:50%; transform:translateX(-50%); color:#fff; background:rgba(0,0,0,.5); border-radius:14px; padding:3px 12px; font-size:0.85rem; pointer-events:none; }
 
   #rotate { display:none; position:fixed; inset:0; z-index:60; background:#111; color:#fff; align-items:center; justify-content:center; text-align:center; padding:30px; font-size:1.1rem; }
   @media (orientation: landscape) { body.ar #rotate { display:flex; } }
@@ -97,6 +100,8 @@ const TAP_RADIUS_PX = 38, AMBIG_PX = 12;
 const CAL = { sx: 1, sy: 1, ox: 0, oy: 0 };
 // false = solo el año; true = fecha completa si el viaje tiene "date" (AAAA-MM-DD o AAAA-MM)
 const SHOW_FULL_DATE = false;
+// Opacidad de la foto de fondo de la pantalla de inicio (0.5 = 50 %, se ve atenuada sobre negro)
+const HOME_BG_OPACITY = 0.5;
 
 const WHO = {
   J: { color: "#2f80ff", label: "Jordi" },
@@ -116,23 +121,22 @@ const WHO = {
    el año lleva "(J)" / "(M)" automáticamente.
    =========================================================================== */
 // fotos("sydney", 12) -> ["fotos/sydney/01.jpg", ..., "fotos/sydney/12.jpg"]
-
 const fotos = (carpeta, n) => Array.from({ length: n }, (_, i) => "fotos/" + carpeta + "/" + String(i + 1).padStart(2, "0") + ".jpg");
 const E = (who, lugar, pais, px, o = {}) => Object.assign({ who, lugar, pais, px, photos: [], notes: "" }, o);
 const TRIPS = [
   // ---- Jordi (azul) ----
-  E("J", "San Francisco", "Estados Unidos", [256, 795], { year: 2008, date: "2008-07" }),
+  E("A", "San Francisco", "Estados Unidos", [256, 795], { year: 2008, date: "2008-07" }),
   E("J", "Las Vegas",     "Estados Unidos", [304, 807], { year: 2008, date: "2008-07" }),
   E("J", "Yosemite",      "Estados Unidos", [283, 795], { year: 2008, date: "2008-07" }),
-  E("J", "Nueva York",    "Estados Unidos", [622, 776], { year: 2008, date: "2008-07" }),
-  E("J", "Roma",          "Italia", [1264, 778]),
+  E("A", "Nueva York",    "Estados Unidos", [622, 776], { year: 2008, date: "2008-07" }),
+  E("A", "Roma",          "Italia", [1264, 778]),
   E("J", "Venecia",       "Italia", [1261, 747]),
   E("J", "Florencia",     "Italia", [1251, 758]),
   E("J", "Copenhague",    "Dinamarca", [1233, 645]),
   E("J", "Ámsterdam",     "Países Bajos", [1206, 678]),
-  E("J", "Londres",       "Reino Unido", [1135, 693], { year: 2012, date: "2012-09" }),
+  E("A", "Londres",       "Reino Unido", [1135, 693], { year: 2012, date: "2012-09" }),
   E("J", "Glasgow",       "Reino Unido", [1118, 654], { year: 2012, date: "2012-09" }),
-  E("J", "Edimburgo",     "Reino Unido", [1130, 651], { year: 2012, date: "2012-09" }),
+  E("A", "Edimburgo",     "Reino Unido", [1130, 651], { year: 2012, date: "2012-09" }),
   E("J", "Inverness",     "Reino Unido", [1122, 639], { year: 2012, date: "2012-09" }),
 
   // ---- Mireia (rosa) ----
@@ -145,7 +149,7 @@ const TRIPS = [
   E("M", null, "Uruguay",             [742, 1413]), // Montevideo
   E("M", null, "Brasil",              [786, 1256]),  // Brasilia
   E("M", null, "Paraguay",            [703, 1331]),  // Asunción
-  E("M", null, "México",              [404, 987]),  // Ciudad de México
+  E("M", "Yucatán", "México", [485, 972]),   // Mérida / Cancún
   E("M", null, "República Dominicana",[686, 986]),  // Santo Domingo
   E("M", "Toronto",  "Canadá", [573, 745]),
   E("M", "Ottawa",   "Canadá", [601, 729]),
@@ -157,7 +161,7 @@ const TRIPS = [
   // ---- Ambos (naranja) ----
   E("A", "Lisboa", "Portugal", [1112, 809], { year: 2015, date: "2015-08" }),
   E("A", null, "Islandia",     [995, 552],  { year: 2015, date: "2015-09" }), // Reikiavik
-  E("A", "Cairns",       "Australia",     [2306, 1314],  { year: 2019, date: "2019-08", photos: fotos("cairns", 6) }),
+  E("A", "Cairns",       "Australia",     [2306, 1314],  { year: 2019, date: "2019-08" }),
   E("A", "Sídney",       "Australia",     [2357, 1425], { year: 2019, date: "2019-08" }),
   E("A", "Melbourne",    "Australia",     [2292, 1507], { year: 2019, date: "2019-08" }),
   E("A", "Perth",        "Australia",     [2066, 1437], { year: 2019, date: "2019-08" }),
@@ -165,6 +169,23 @@ const TRIPS = [
   E("A", "Christchurch", "Nueva Zelanda", [2466, 1573], { year: 2019, date: "2019-08" }),
   E("A", null, "Singapur",     [1979, 1110], { year: 2019, date: "2019-08" }),
   E("A", null, "Cuba",         [551, 956],  { year: 2016, date: "2016-08" }),  // La Habana
+
+  // ---- Añadidos desde las chinchetas del mapa antiguo ----
+  E("J", "Los Ángeles",   "Estados Unidos", [277, 838]),
+  E("J", "Helsinki",      "Finlandia",      [1326, 572]),
+  E("M", "Vancouver",     "Canadá",         [272, 686]),
+  E("M", "Florida",       "Estados Unidos", [542, 905]),   // Orlando / Miami
+  E("M", "Boston",        "Estados Unidos", [666, 755]),
+  E("M", "Canarias",      "España",         [1015, 902]),
+  E("M", "San Petersburgo", "Rusia",        [1362, 580]),
+  E("M", "Berlín",        "Alemania",       [1255, 680]),
+  E("M", "Praga",         "Chequia",        [1266, 706]),
+  E("M", "Budapest",      "Hungría",        [1305, 722]),
+  E("A", "París",         "Francia",        [1183, 722]),
+  E("A", "Barcelona",     "España",         [1188, 783]),
+  E("A", "Marsella",      "Francia",        [1214, 768]),
+  E("A", "Fráncfort",     "Alemania",       [1219, 703]),
+  E("A", "Praga",         "Chequia",        [1266, 706]),
 
   // ---- Nos gustaría ir (naranja) · sacados de las chinchetas naranjas del mapa antiguo ----
   E("W", "Hawái",           "Estados Unidos", [100, 912]),
@@ -181,20 +202,23 @@ const TRIPS = [
   E("W", null, "Seychelles",                  [1590, 1138]),
   E("W", null, "Maldivas",                    [1755, 1116]),  // por confirmar
   E("W", "Bangkok",         "Tailandia",      [1950, 1012]),
-  E("W", "Yakarta",         "Indonesia",      [2037, 1204])
+  E("W", "Yakarta",         "Indonesia",      [2037, 1204]),
+  E("W", "Osaka / Kioto",   "Japón",          [2232, 705]),
+  E("W", "Hong Kong",       "China",          [2036, 936])
 ];
 
 /* ---------- Preparación de datos ---------- */
+const ORD = { J: 0, M: 1, A: 2, W: 3 };
 const groups = {};
-TRIPS.forEach(t => { (groups[t.pais + "|" + (t.lugar || "")] ||= []).push(t); });
+TRIPS.forEach(t => { t.gk = t.pais + "|" + (t.lugar || ""); (groups[t.gk] ||= []).push(t); });
+Object.values(groups).forEach(g => {                 // mismo sitio visitado por separado -> puntos juntos y etiqueta
+  g.sort((a, b) => ORD[a.who] - ORD[b.who]);
+  const multi = new Set(g.filter(t => t.who !== "W").map(t => t.who)).size > 1;
+  g.forEach((t, i) => { t.showTag = multi && t.who !== "W"; t.pair = g.length > 1 ? 2 * (i - (g.length - 1) / 2) : 0; });
+});
 TRIPS.forEach((t, i) => {
   t.id = i;
-  t.gk = t.pais + "|" + (t.lugar || "");
   t.color = WHO[t.who].color;
-  const g = groups[t.pais + "|" + (t.lugar || "")];
-  const hasJ = g.some(x => x.who === "J"), hasM = g.some(x => x.who === "M");
-  t.showTag = hasJ && hasM && (t.who === "J" || t.who === "M");   // mostrar (J)/(M)
-  t.pair = t.showTag ? (t.who === "J" ? -1 : 1) : 0;       // puntos azul y rosa juntos
   t.x = ((t.px[0] / IMG_W - 0.5) * CAL.sx) + CAL.ox;
   t.y = (((IMG_H / 2 - t.px[1]) / IMG_W) * CAL.sy) + CAL.oy;
 });
@@ -207,7 +231,7 @@ function whenText(t) {
     const [y, m, d] = t.date.split("-");
     s = [d ? (+d) + " de" : null, m ? MESES[+m - 1] + " de" : null, y].filter(Boolean).join(" ");
   } else s = t.year != null ? String(t.year) : "Año sin indicar";
-  return t.showTag ? s + " (" + t.who + ")" : s;
+  return t.showTag ? s + " (" + (t.who === "A" ? "J+M" : t.who) + ")" : s;
 }
 
 /* ---------- Componente A-Frame: puntos con tamaño según distancia ---------- */
@@ -326,6 +350,7 @@ if (DEBUG) {
 </a-scene>
 
 <div id="home">
+  <div id="home-bg"></div>
   <h1>🗺️ Nuestro Mapa de Viajes</h1>
   <p>Apunta con la cámara al mapa de la pared (en vertical) para ver dónde hemos estado, o consulta la lista sin cámara.</p>
   <button class="btn btn-primary" id="start-ar">Escanear el mapa (AR)</button>
@@ -361,7 +386,7 @@ if (DEBUG) {
   <header><button id="gallery-back">←</button><span id="gallery-title"></span></header>
   <div class="grid" id="gallery-grid"></div>
 </div>
-<div id="viewer"><img id="viewer-img" alt=""></div>
+<div id="viewer"><img id="viewer-img" alt=""><div id="viewer-count"></div></div>
 
 <div id="dbg" style="position:fixed;left:8px;bottom:8px;z-index:26;color:#0f0;font:12px monospace;background:rgba(0,0,0,.6);padding:2px 6px;border-radius:6px;display:none"></div>
 <div id="rotate">📱 Gira el móvil a vertical para usar la cámara</div>
@@ -379,7 +404,8 @@ function push(n) { stack = [...stack, n]; history.pushState({ s: stack }, ""); r
 window.addEventListener("popstate", e => { stack = (e.state && e.state.s) || []; render(); });
 $("card-close").onclick = () => history.back();
 $("gallery-back").onclick = () => history.back();
-$("viewer").onclick = () => history.back();
+let lastSwipe = 0;
+$("viewer").onclick = () => { if (Date.now() - lastSwipe > 400) history.back(); };
 $("pick-close").onclick = () => history.back();
 $("pick").onclick = e => { if (e.target === $("pick")) history.back(); };
 
@@ -417,24 +443,86 @@ function openCard(t) {
       if (i === MAX - 1 && t.photos.length > MAX) {
         d.insertAdjacentHTML("beforeend", '<div class="more">+' + (t.photos.length - MAX + 1) + "</div>");
       }
-      d.onclick = () => openGallery(t);
+      const isMore = i === MAX - 1 && t.photos.length > MAX;
+      d.onclick = () => isMore ? openGallery(t) : openGallery(t, i);   // la miniatura "+N" abre la galería; el resto, la foto
       grid.appendChild(d);
     });
     box.appendChild(grid);
   }
   push("card");
 }
-function openGallery(t) {
+function openGallery(t, idx) {
   $("gallery-title").textContent = (t.lugar ? t.lugar + ", " : "") + t.pais + " · " + whenText(t);
   const g = $("gallery-grid"); g.innerHTML = "";
-  t.photos.forEach(src => {
+  t.photos.forEach((src, i) => {
     const d = document.createElement("div"); d.className = "ph";
     d.innerHTML = '<img loading="lazy" src="' + src + '" alt="">';
-    d.onclick = () => { $("viewer-img").src = src; push("viewer"); };
+    d.onclick = () => openViewer(t.photos, i);
     g.appendChild(d);
   });
-  push("gallery");
+  push("gallery");                                  // la galería queda "debajo" para volver con Atrás
+  if (idx != null) openViewer(t.photos, idx);       // y la foto pulsada se abre directamente encima
 }
+
+/* ---- Visor de fotos: deslizar a izquierda/derecha para cambiar ---- */
+let vList = [], vIdx = 0;
+const vimg = $("viewer-img");
+function setPhoto(i) {
+  vIdx = i; vimg.src = vList[i];
+  $("viewer-count").textContent = (i + 1) + " / " + vList.length;
+  [i - 1, i + 1].forEach(j => { if (vList[j]) { const im = new Image(); im.src = vList[j]; } });   // precarga vecinas
+}
+function openViewer(list, i) {
+  vList = list; setPhoto(i);
+  vimg.style.transition = "none"; vimg.style.transform = "translateX(0)"; vimg.style.opacity = 1;
+  push("viewer");
+}
+function goPhoto(dir) {                              // dir = +1 siguiente, -1 anterior
+  const n = vIdx + dir;
+  if (n < 0 || n >= vList.length) { vimg.style.transition = "transform .15s"; vimg.style.transform = "translateX(0)"; return; }
+  vimg.style.transition = "transform .15s ease-out, opacity .15s"; vimg.style.transform = "translateX(" + (-dir * innerWidth * 0.6) + "px)"; vimg.style.opacity = 0;
+  setTimeout(() => {
+    setPhoto(n);
+    vimg.style.transition = "none"; vimg.style.transform = "translateX(" + (dir * innerWidth * 0.4) + "px)";
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      vimg.style.transition = "transform .18s ease-out, opacity .18s"; vimg.style.transform = "translateX(0)"; vimg.style.opacity = 1;
+    }));
+  }, 150);
+}
+let sx = 0, dx = 0, drag = false, moved = false;
+$("viewer").addEventListener("touchstart", e => {
+  if (e.touches.length !== 1) { drag = false; return; }
+  sx = e.touches[0].clientX; dx = 0; drag = true; moved = false; vimg.style.transition = "none";
+}, { passive: true });
+$("viewer").addEventListener("touchmove", e => {
+  if (!drag) return;
+  dx = e.touches[0].clientX - sx;
+  if (Math.abs(dx) > 10) moved = true;
+  if (moved) vimg.style.transform = "translateX(" + dx + "px)";
+}, { passive: true });
+$("viewer").addEventListener("touchend", () => {
+  if (!drag) return; drag = false;
+  if (moved) lastSwipe = Date.now();
+  if (moved && Math.abs(dx) > 60) goPhoto(dx < 0 ? 1 : -1);
+  else if (moved) { vimg.style.transition = "transform .15s"; vimg.style.transform = "translateX(0)"; }
+});
+document.addEventListener("keydown", e => {
+  if (!stack.includes("viewer")) return;
+  if (e.key === "ArrowRight") goPhoto(1); else if (e.key === "ArrowLeft") goPhoto(-1);
+});
+
+/* ---- Fondo aleatorio de la pantalla de inicio (una foto de la galería) ---- */
+(function setHomeBackground() {
+  const bg = $("home-bg"); bg.style.opacity = HOME_BG_OPACITY;
+  const pool = TRIPS.flatMap(t => t.photos).sort(() => Math.random() - 0.5).slice(0, 8);   // si alguna no carga, prueba otra
+  (function tryNext() {
+    const src = pool.shift(); if (!src) return;
+    const im = new Image();
+    im.onload = () => { bg.style.backgroundImage = 'url("' + src + '")'; };
+    im.onerror = tryNext;
+    im.src = src;
+  })();
+})();
 
 /* ---- Inicio: AR ---- */
 $("start-ar").addEventListener("click", async () => {
