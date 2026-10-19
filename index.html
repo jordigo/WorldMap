@@ -12,7 +12,7 @@
 
 <style>
   /* IMPORTANTE: html/body SIN color de fondo, o tapan el vídeo de la cámara */
-  html, body { margin:0; padding:0; height:100%; overflow:hidden; font-family:-apple-system, system-ui, sans-serif; }
+  html, body { margin:0; padding:0; height:100%; overflow:hidden; overscroll-behavior:none; font-family:-apple-system, system-ui, sans-serif; }
   a-scene { background:transparent; }
 
   #home { position:fixed; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;
@@ -39,17 +39,16 @@
 
   /* Capas: ficha (1) -> galería (2) -> visor (3) */
   #card { display:none; position:fixed; inset:0; background:rgba(0,0,0,.7); align-items:flex-end; justify-content:center; z-index:30; }
-  #card-inner { background:#1a1a1a; color:#fff; width:100%; max-width:520px; max-height:85vh; display:flex; flex-direction:column;
+  #card-inner { will-change:transform; background:#1a1a1a; color:#fff; width:100%; max-width:520px; max-height:85vh; display:flex; flex-direction:column;
                 border-radius:20px 20px 0 0; box-sizing:border-box; overflow:hidden; }
   #card-head { flex:none; padding:16px 18px 6px; touch-action:none; user-select:none; -webkit-user-select:none; }
   #card-inner.expanded #card-head { padding-top:calc(16px + env(safe-area-inset-top,0px)); }
   #card-inner.has-photos #card-head { cursor:pointer; }
-  #card-grab { display:none; width:42px; height:4px; border-radius:2px; background:#666; margin:0 auto 12px; }
-  #card-inner.draggable #card-grab { display:block; }
+  #card-grab { display:block; width:42px; height:4px; border-radius:2px; background:#666; margin:0 auto 12px; }
   .head-row { display:flex; align-items:center; justify-content:space-between; }
   #card-count { color:#bbb; font-size:0.85rem; }
-  #card-body { flex:1 1 auto; min-height:0; overflow-y:auto; padding:0 18px calc(20px + env(safe-area-inset-bottom,0px)); }
-  #card-inner:not(.expanded) #card-photos .grid .ph:nth-child(n+7) { display:none; }
+  #card-body { flex:1 1 auto; min-height:0; overflow-y:auto; overscroll-behavior-y:contain; padding:0 18px calc(20px + env(safe-area-inset-bottom,0px)); }
+  #card-inner:not(.expanded) #card-photos .grid .ph:nth-child(n+10) { display:none; }   /* plegada: máximo 3 filas (9 fotos) */
   #card-inner.expanded .more { display:none; }
   .chip { display:inline-block; font-size:0.75rem; font-weight:600; padding:3px 10px; border-radius:20px; color:#fff; margin-bottom:8px; }
   #card-inner h2 { margin:0; font-size:1.4rem; }
@@ -450,13 +449,14 @@ function openCard(t) {
   $("card-notes").style.display = t.notes ? "block" : "none";
   // estado inicial: ficha plegada
   const ci = $("card-inner");
-  ci.className = (t.photos.length ? "has-photos " : "") + (t.photos.length > 6 ? "draggable" : "");
-  ci.style.transition = ""; ci.style.height = ""; ci.style.maxHeight = ""; $("card-body").scrollTop = 0;
+  ci.className = t.photos.length ? "has-photos" : "";
+  ci.style.transition = ""; ci.style.height = ""; ci.style.maxHeight = ""; ci.style.transform = "";
+  $("card").style.transition = ""; $("card").style.background = ""; $("card-body").scrollTop = 0;
   const box = $("card-photos"); box.innerHTML = "";
   if (!t.photos.length) {
     box.innerHTML = '<div class="nophotos">Aún no hay fotos de este viaje</div>';
   } else {
-    const MAX = 6, grid = document.createElement("div"); grid.className = "grid";
+    const MAX = 9, grid = document.createElement("div"); grid.className = "grid";   // plegada: 3 filas de 3
     t.photos.forEach((src, i) => {
       const d = document.createElement("div"); d.className = "ph";
       d.innerHTML = '<img loading="lazy" src="' + src + '" alt="">';
@@ -472,47 +472,85 @@ function openCard(t) {
   requestAnimationFrame(() => { collapsedH = ci.offsetHeight; });
 }
 
-/* ---- Cabecera de la ficha: tocar = galería · arrastrar arriba/abajo = ampliar/reducir ---- */
-let collapsedH = 0, ds = null;
-const chead = $("card-head");
-function setSheet(expand) {
-  const ci = $("card-inner");
-  ci.style.transition = "height .22s ease";
+/* ---- Gestos de la ficha ----
+   · Arrastrar hacia abajo (plegada)  -> cerrar
+   · Arrastrar hacia arriba           -> ocupar toda la pantalla (solo si hay más de 9 fotos)
+   · Arrastrar hacia abajo (ampliada) -> volver a plegar
+   · Tocar la cabecera                -> abrir la galería
+   Se puede arrastrar desde la cabecera o, si el contenido está arriba del todo, desde las fotos. */
+let collapsedH = 0, g = null;
+const ci = $("card-inner"), cov = $("card"), chead = $("card-head"), cbody = $("card-body");
+const canExpand = () => current && current.photos.length > 9;
+const lowH = () => collapsedH || Math.round(innerHeight * 0.5);
+
+function setSheet(expand) {                                  // animar a ampliada / plegada
+  ci.style.transition = "height .22s ease, transform .2s ease"; ci.style.transform = "";
+  cov.style.transition = "background .2s"; cov.style.background = "";
   if (expand) {
     ci.classList.add("expanded"); ci.style.maxHeight = "none"; ci.style.height = innerHeight + "px";
   } else {
-    ci.style.height = (collapsedH || Math.round(innerHeight * 0.5)) + "px";
+    ci.style.height = lowH() + "px";
     setTimeout(() => {
       ci.classList.remove("expanded"); ci.style.transition = ""; ci.style.height = ""; ci.style.maxHeight = "";
-      $("card-body").scrollTop = 0;
+      cbody.scrollTop = 0;
     }, 230);
   }
 }
-chead.addEventListener("pointerdown", e => {
-  const ci = $("card-inner");
-  ds = { y0: e.clientY, h0: ci.offsetHeight, moved: false, wasExp: ci.classList.contains("expanded") };
-  chead.setPointerCapture(e.pointerId);
-});
-chead.addEventListener("pointermove", e => {
-  if (!ds) return;
-  const dy = e.clientY - ds.y0;
-  if (Math.abs(dy) > 8) ds.moved = true;
-  if (!ds.moved || !current || current.photos.length <= 6) return;
-  const ci = $("card-inner");
-  if (dy < 0 && !ci.classList.contains("expanded")) ci.classList.add("expanded");   // al subir se muestran todas las miniaturas
-  ci.style.transition = "none"; ci.style.maxHeight = "none";
-  const lo = collapsedH || Math.round(innerHeight * 0.5);
-  ci.style.height = Math.min(innerHeight, Math.max(lo, ds.h0 - dy)) + "px";
-});
-chead.addEventListener("pointerup", e => {
-  if (!ds) return;
-  const d = ds; ds = null;
-  const dy = e.clientY - d.y0;
-  if (!d.moved) { if (current && current.photos.length) openGallery(current); return; }   // toque simple: galería
-  if (!current || current.photos.length <= 6) return;
-  if (dy < -40) setSheet(true); else if (dy > 40) setSheet(false); else setSheet(d.wasExp);
-});
-chead.addEventListener("pointercancel", () => { if (ds) { const w = ds.wasExp; ds = null; setSheet(w); } });
+function closeSheet() {                                      // deslizar hacia abajo y cerrar
+  ci.style.transition = "transform .2s ease-in"; ci.style.transform = "translateY(100%)";
+  cov.style.transition = "background .2s"; cov.style.background = "rgba(0,0,0,0)";
+  setTimeout(() => history.back(), 200);
+}
+function gStart(y) { g = { y0: y, h0: ci.offsetHeight, wasExp: ci.classList.contains("expanded"), moved: false, dy: 0 }; }
+function gMove(y) {
+  if (!g) return;
+  const dy = y - g.y0; g.dy = dy;
+  if (Math.abs(dy) > 8) g.moved = true;
+  if (!g.moved) return;
+  ci.style.transition = "none"; cov.style.transition = "none";
+  if (g.wasExp) {                                            // ampliada: bajar = plegar, acompañando al dedo
+    ci.style.height = Math.min(innerHeight, Math.max(lowH(), g.h0 - dy)) + "px";
+  } else if (dy < 0 && canExpand()) {                        // plegada: subir = ampliar (más de 9 fotos)
+    ci.classList.add("expanded"); ci.style.maxHeight = "none"; ci.style.transform = "";
+    ci.style.height = Math.min(innerHeight, g.h0 - dy) + "px"; cov.style.background = "";
+  } else if (dy > 0) {                                       // plegada: bajar = cerrar, la ficha sigue al dedo
+    if (ci.classList.contains("expanded")) { ci.classList.remove("expanded"); ci.style.maxHeight = ""; ci.style.height = g.h0 + "px"; }
+    ci.style.transform = "translateY(" + dy + "px)";
+    cov.style.background = "rgba(0,0,0," + (0.7 * Math.max(0, 1 - dy / g.h0)).toFixed(2) + ")";
+  }
+}
+function gEnd() {                                            // devuelve "tap" si no hubo arrastre
+  if (!g) return; const d = g; g = null;
+  if (!d.moved) return "tap";
+  const dy = d.dy;
+  if (d.wasExp) setSheet(!(dy > 40));
+  else if (dy > Math.min(110, d.h0 * 0.25)) closeSheet();
+  else if (dy < -40 && canExpand()) setSheet(true);
+  else setSheet(false);
+}
+// Cabecera (ratón o dedo)
+chead.addEventListener("pointerdown", e => { gStart(e.clientY); chead.setPointerCapture(e.pointerId); });
+chead.addEventListener("pointermove", e => gMove(e.clientY));
+chead.addEventListener("pointerup", () => { if (gEnd() === "tap" && current && current.photos.length) openGallery(current); });
+chead.addEventListener("pointercancel", () => { if (g) { const w = g.wasExp; g = null; setSheet(w); } });
+// Cuerpo (fotos): solo arrastra la ficha si el contenido está arriba del todo
+let bs = null;
+cbody.addEventListener("touchstart", e => {
+  bs = e.touches.length === 1 ? { y0: e.touches[0].clientY, top: cbody.scrollTop <= 0, fits: cbody.scrollHeight <= cbody.clientHeight + 2, on: false } : null;
+}, { passive: true });
+cbody.addEventListener("touchmove", e => {
+  if (!bs) return;
+  const y = e.touches[0].clientY, dy = y - bs.y0;
+  if (!bs.on) {
+    const expanded = ci.classList.contains("expanded");
+    if ((dy > 6 && bs.top) || (dy < -6 && bs.fits && !expanded && canExpand())) { bs.on = true; gStart(bs.y0); } else return;
+  }
+  if (e.cancelable) e.preventDefault();
+  gMove(y);
+}, { passive: false });
+cbody.addEventListener("touchend", () => { if (bs && bs.on) gEnd(); bs = null; });
+cbody.addEventListener("touchcancel", () => { if (bs && bs.on && g) { const w = g.wasExp; g = null; setSheet(w); } bs = null; });
+
 function openGallery(t, idx) {
   $("gallery-title").textContent = (t.lugar ? t.lugar + ", " : "") + t.pais + " · " + whenText(t);
   const g = $("gallery-grid"); g.innerHTML = "";
